@@ -12,7 +12,7 @@ def _BV(bit):
 # Create I2C bus
 i2c = busio.I2C(board.GP1, board.GP0)
 i2c.deinit()
-i2c = busio.I2C(board.GP1, board.GP0)
+i2c = busio.I2C(board.GP1, board.GP0, frequency=100_000)
 
 # I2C address of the device
 DEVICE_ADDRESS = 0x31
@@ -83,7 +83,7 @@ def readCapTouch(pin):
 	
 	# Write to the device
 	i2c.writeto(DEVICE_ADDRESS, bytes([COMMAND_CAP_TOUCH, capTouchPins[pin], 5]))
-	time.sleep(0.001)  # Sleep for 1 millisecond
+	#time.sleep(0.001)  # Sleep for 1 millisecond
 	
 	# Set the mode
 	i2c.writeto(DEVICE_ADDRESS, bytes([COMMAND_SET_MODE, MODE_REGISTER_DEC]))   
@@ -119,31 +119,37 @@ pixels = neopixel.NeoPixel(pixel_pin, num_pixels, brightness=.1, auto_write=Fals
 
 now = time.monotonic()
 cycles = 0
+
+def update_light(pin):
+	sensor_value = readCapTouch(pin)
+	
+	# account for the field produced by the circuitry on the back of the board
+	if pin == 5:
+		sensor_value -= 550
+	else:
+		sensor_value -= 450
+
+	rounded_value = int(sensor_value / 100)
+	output.append(rounded_value)
+
+	is_sensor_touched = int(rounded_value > 0)
+
+	if is_sensor_touched: 
+		pixels[num_pixels-1-pin] = (rounded_value * 50, 250 - (rounded_value * 50), 0)
+	else:
+		pixels[num_pixels-1-pin] = (0, 0, 0)
+
+
 while True:
 	#print("Cap Touch: ")
 	output = []
-	for i in range(6):
-		sensor_value = readCapTouch(i)
-		
-		# account for the field produced by the circuitry on the back of the board
-		if i == 5:
-			sensor_value -= 550
-		else:
-			sensor_value -= 450
-  
-		rounded_value = int(sensor_value / 100)
-		output.append(rounded_value)
-  
-		is_sensor_touched = int(rounded_value > 0)
-  
-		if is_sensor_touched: 
-			pixels[num_pixels-1-i] = (rounded_value * 50, 250 - (rounded_value * 50), 0)
-		else:
-			pixels[num_pixels-1-i] = (0, 0, 0)
+	list(map(lambda i: update_light(i), range(6)))
+	# for i in range(6):
+	# 	update_light(i)
+ 	
 	pixels.show()
 	cycles += 1
-	if cycles == 100:
-		print((time.monotonic() - now)/100, "ms/cycle")
+	if cycles == 10:
+		print(int((time.monotonic() - now)/10*1000), "ms/cycle")
 		now = time.monotonic()
 		cycles = 0
-	#print(output)

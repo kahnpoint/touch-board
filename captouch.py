@@ -2,8 +2,6 @@ import busio
 import time
 import board
 from attinydefs import *
-from rainbowio import colorwheel
-import neopixel
  
 # redeclare _BV
 def _BV(bit):
@@ -112,38 +110,10 @@ def readCapTouch(pin):
 	i2c.unlock()
 	return value
 
-pixel_pin = board.GP7
-num_pixels = 8
 
-pixels = neopixel.NeoPixel(pixel_pin, num_pixels, brightness=.1, auto_write=False)
-
-now = time.monotonic()
-cycles = 0
 while True:
 	#print("Cap Touch: ")
 	output = []
 	for i in range(6):
-		sensor_value = readCapTouch(i)
-		
-		# account for the field produced by the circuitry on the back of the board
-		if i == 5:
-			sensor_value -= 550
-		else:
-			sensor_value -= 450
-  
-		rounded_value = int(sensor_value / 100)
-		output.append(rounded_value)
-  
-		is_sensor_touched = int(rounded_value > 0)
-  
-		if is_sensor_touched: 
-			pixels[num_pixels-1-i] = (rounded_value * 50, 250 - (rounded_value * 50), 0)
-		else:
-			pixels[num_pixels-1-i] = (0, 0, 0)
-	pixels.show()
-	cycles += 1
-	if cycles == 100:
-		print((time.monotonic() - now)/100, "ms/cycle")
-		now = time.monotonic()
-		cycles = 0
-	#print(output)
+		output.append(int(readCapTouch(i) > 600))
+	print(output)

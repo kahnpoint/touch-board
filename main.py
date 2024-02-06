@@ -1,86 +1,95 @@
+import busio
 import time
 import board
-import busio
-from adafruit_bus_device.i2c_device import I2CDevice
+ 
+# Create I2C bus
+i2c = busio.I2C(board.GP1, board.GP0)
 
 # I2C address of the device
 DEVICE_ADDRESS = 0x31
 
-# Register addresses (example)
-COMMAND_SET_MODE = 0x00  # replace with actual register address
-FIRMWARE_REVISION_REG = 0x01  # replace with actual register address
-T841_ADCSRA = 0x02  # replace with actual register address
-T841_DIDR0 = 0x03  # replace with actual register address
-T841_PRR = 0x04  # replace with actual register address
-COMMAND_CLOCK_PRESCALER = 0x05  # replace with actual register address
-COMMAND_CAP_TOUCH = 0x06  # replace with actual register address
-RETURN_VAL_REG_0 = 0x07  # replace with actual register address
-RETURN_VAL_REG_1 = 0x08  # replace with actual register address
-# Add the constants to your Python code
+# Firmware revision register
+FIRMWARE_REVISION_REG = 0x19
+EXPECTED_CAPTOUCHWIRELING_FIRMWARE = 0x1A
+
+# Mode register
+MODE_REGISTER_INC = 0xAA
 MODE_REGISTER_DEC = 0xAB
 MODE_COMMAND = 0xAC
-EXPECTED_CAPTOUCHWIRELING_FIRMWARE = 0x01  # replace with actual expected firmware version
-T841_ADEN = 0x80  # replace with actual value
-T841_PRSPI = 0x02  # replace with actual value
-T841_PRUSART0 = 0x01  # replace with actual value
-T841_PRUSART1 = 0x01  # replace with actual value
-T841_CLOCK_PRESCALER_1 = 0x00  # replace with actual value
-numSensors = 1  # replace with actual number of sensors
+COMMAND_SET_MODE = 0x00
+COMMAND_CAP_TOUCH = 0x13
 
-def _BV(bit):
-	return 1 << bit
+# Return value registers
+RETURN_VAL_REG_0 = 0x1A
+RETURN_VAL_REG_1 = 0x1B
+RETURN_VAL_REG_2 = 0x1C
+RETURN_VAL_REG_3 = 0x1D
 
-class CapTouchWireling:
-	def __init__(self, sda, scl, addr = 0):
-		self.address = DEVICE_ADDRESS + addr
-		self.device = I2CDevice(busio.I2C(sda,scl), self.address)
-		self.capTouchPins = [0]*numSensors
+# print connected devices
+while not i2c.try_lock():
+	pass
+try:
+	print("I2C addresses found:", [hex(device_address) for device_address in i2c.scan()])
+finally:
+	i2c.unlock()
 
-	# def write_byte(self, *args):
-	# 	with self.device:
-	# 		self.device.write(bytes(args))
+
+while not i2c.try_lock():
+	pass
+
+
+buffer = bytearray(1) 
+try:
+    # Read firmware revision register
+    i2c.writeto_then_readfrom(DEVICE_ADDRESS, bytearray([FIRMWARE_REVISION_REG]), buffer)
+    print("Firmware Revision:", hex(buffer[0]))
+except Exception as e:
+    print("Error:", e)
+finally:
+#     i2c.deinit()  # Release the I2C bus
+	i2c.unlock()  
+ 
+capTouchPins = [0, 1, 2, 3, 5, 7]
+
+def readCapTouch(pin):
+    while not i2c.try_lock():
+        pass
+    try:
+        # Write to the device
+        i2c.writeto(DEVICE_ADDRESS, bytes([COMMAND_CAP_TOUCH, capTouchPins[pin], 5]))
+        time.sleep(0.001)  # Sleep for 1 millisecond
         
-	# def read(self, register_address):
-	# 	with self.device:
-	# 		self.device.write(bytes([register_address]))
-	# 		result = bytearray(1)
-	# 		self.device.readinto(result)
-	# 	return result[0]
+        # Set the mode
+        i2c.writeto(DEVICE_ADDRESS, bytes([COMMAND_SET_MODE, MODE_REGISTER_DEC]))   
+        
+        # Read two values
+        buffer1 = bytearray(1)
+        buffer2 = bytearray(1)
+        i2c.writeto_then_readfrom(DEVICE_ADDRESS, bytearray([RETURN_VAL_REG_0]), buffer1)
+        i2c.writeto_then_readfrom(DEVICE_ADDRESS, bytearray([RETURN_VAL_REG_1]), buffer2)
+        
+        # Print the values of buffer1 and buffer2
+       # print("buffer1: ", buffer1[0])
+       # print("buffer2: ", buffer2[0])  
+        
+        # Combine the two values
+        value = buffer1[0] + (buffer2[0] << 8)
+        
+        # Print the value
+        #print("value: ", value)
+        
+        # Set the mode back
+        i2c.writeto(DEVICE_ADDRESS, bytes([COMMAND_SET_MODE, MODE_COMMAND]))
+    finally:
+        i2c.unlock()
+    return value
 
-	# def begin(self):
-	# 	self.write_byte(COMMAND_SET_MODE, MODE_REGISTER_DEC)
-	# 	if self.read(FIRMWARE_REVISION_REG) != EXPECTED_CAPTOUCHWIRELING_FIRMWARE:
-	# 		return 1
+"""
 
-	# 	self.write_byte(T841_ADCSRA, _BV(T841_ADEN) | 4 | 1)
-	# 	self.write_byte(T841_DIDR0, 0xAF)
-	# 	self.write_byte(T841_PRR, _BV(T841_PRSPI) | _BV(T841_PRUSART0) | _BV(T841_PRUSART1))
-
-	# 	self.write_byte(COMMAND_SET_MODE, MODE_COMMAND)
-	# 	self.write_byte(COMMAND_CLOCK_PRESCALER, T841_CLOCK_PRESCALER_1)
-
-	# 	for pin in range(numSensors):
-	# 		self.capTouchCal[pin] = self.capTouchRead(pin)
-	# 		self.overCalCount[pin] = 0
-
-	# 	return 0
-
-	# def capTouchRead(self, pin):
-	# 	self.write_byte(COMMAND_CAP_TOUCH, self.capTouchPins[pin], 5)
-	# 	time.sleep(0.001)
-	# 	self.write_byte(COMMAND_SET_MODE, MODE_REGISTER_DEC)
-	# 	value = self.read(RETURN_VAL_REG_0)
-	# 	value += self.read(RETURN_VAL_REG_1) << 8
-	# 	self.write_byte(COMMAND_SET_MODE, MODE_COMMAND)
-	# 	return value
-	
-# Use the class
-sda = board.GP5  # replace with actual SDA pin
-scl = board.GP4  # replace with actual SCL pin
-capTouchWireling = CapTouchWireling(sda, scl)
-#capTouchWireling.begin()
-
-# while True:
-# 	for pin in range(numSensors):
-# 		print("Pin", pin, ":", capTouchWireling.capTouchRead(pin))
-# 	time.sleep(0.5)
+while True:
+	print("Cap Touch: ")
+	output = []
+	for i in range(6):
+		output.append(readCapTouch(i))
+	print(output)
+"""  
